@@ -2,64 +2,96 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-st.header('Análisis de los Juegos Olímpicos 🏅')
+st.set_page_config(page_title="Olympic Data Analytics", page_icon="🥇", layout="wide")
 
-# Leer el archivo que descargamos
-df = pd.read_csv('olympics_data.csv')
-
-st.write('Esta aplicación muestra la relación entre el peso y la altura de los atletas.')
-
-# Crear un botón para mostrar una gráfica
-if st.button('Mostrar Gráfico de Dispersión'):
-    st.write('Generando gráfica...')
-    # Creamos la gráfica de Peso vs Altura
-    fig = px.scatter(df.dropna(subset=['height', 'weight']).head(5000), 
-                     x="weight", y="height", color="sex",
-                     title="Peso vs Altura de Atletas")
-    st.plotly_chart(fig, use_container_width=True)
-
-st.set_page_config(page_title="Olympic Data Analytics", page_icon="🥇")
-st.header('Análisis Histórico de los Juegos Olímpicos 🏅')
-
-# Cargar los datos (usamos cache para que cargue rápido)
 @st.cache_data
 def load_data():
-    return pd.read_csv('olympics_data.csv')
+    df = pd.read_csv('olympics_data.csv')
+    df['medal'] = df['medal'].fillna('No Medal')
+    return df
 
 df = load_data()
 
-st.write('Explora la fisionomía y demografía de los atletas olímpicos a través de los años.')
+st.title('Dashboard Olímpico')
+st.markdown("---")
 
-# --- SECCIÓN 1: HISTOGRAMA (EDADES) ---
-st.subheader('¿A qué edad compiten los atletas?')
-# Usamos un checkbox como pide el proyecto
-show_hist = st.checkbox('Construir histograma de edades')
+st.header('1. Distribución de Edades')
+deportes = sorted(df['sport'].unique())
+deporte_sel = st.selectbox('Selecciona un Deporte para ver las edades:', ['Todos'] + deportes)
 
-if show_hist:
-    st.write('Distribución de frecuencias por edad de los competidores.')
-    fig_hist = px.histogram(df, x="age", nbins=30, color_discrete_sequence=['#D4AF37'],
-                           title='Frecuencia de participación por Edad',
-                           labels={'age': 'Edad'})
-    st.plotly_chart(fig_hist, use_container_width=True)
+if deporte_sel == 'Todos':
+    df_edad = df
+else:
+    df_edad = df[df['sport'] == deporte_sel]
 
-# --- SECCIÓN 2: GRÁFICO DE DISPERSIÓN (BIOMETRÍA) ---
-st.subheader('Relación Altura vs Peso por Deporte')
-st.write('Compara cómo cambia el cuerpo de un gimnasta vs un pesista.')
+fig_hist = px.histogram(df_edad, x="age", nbins=30, 
+                       color_discrete_sequence=['#D4AF37'],
+                       title=f'Edades en: {deporte_sel}',
+                       labels={'age': 'Edad'})
+st.plotly_chart(fig_hist, use_container_width=True)
 
-# Botón para generar el gráfico
-if st.button('Generar Gráfico de Dispersión'):
-    # Filtramos nulos para que el gráfico sea fluido
-    df_biometry = df.dropna(subset=['height', 'weight'])
+st.header('2. Ranking de Medallas por País')
+col1, col2 = st.columns([1, 3])
+
+with col1:
+    min_year = int(df['year'].min())
+    max_year = int(df['year'].max())
+    años_rango = st.slider('Selecciona el rango de años:', min_year, max_year, (min_year, max_year))
+
+df_medals = df[(df['year'] >= años_rango[0]) & (df['year'] <= años_rango[1]) & (df['medal'] != 'No Medal')]
+
+top_paises = df_medals.groupby('noc')['medal'].count().reset_index().sort_values(by='medal', ascending=False).head(15)
+
+with col2:
+    fig_paises = px.bar(top_paises, x='noc', y='medal', 
+                       title=f'Top 15 Países con más medallas ({años_rango[0]} - {años_rango[1]})',
+                       labels={'noc': 'País (NOC)', 'medal': 'Total Medallas'},
+                       color='medal', color_continuous_scale='Viridis')
+    st.plotly_chart(fig_paises, use_container_width=True)
+
+st.header('3. Hall de la Fama por Deporte')
+
+col_gen, col_dep = st.columns([1, 2])
+
+with col_gen:
+    genero_top = st.radio("Género:", ('M', 'F'), horizontal=True, key="gen_top")
+
+with col_dep:
+    deporte_top = st.selectbox('Selecciona el Deporte:', ['Todos'] + deportes, key="dep_top")
+
+df_top = df[(df['sex'] == genero_top) & (df['medal'] != 'No Medal')]
+
+if deporte_top != 'Todos':
+    df_top = df_top[df_top['sport'] == deporte_top]
+
+ranking_individual = df_top.groupby('name')['medal'].count().reset_index()
+ranking_individual = ranking_individual.sort_values(by='medal', ascending=False).head(10)
+
+if not ranking_individual.empty:
+    fig_top_10 = px.bar(ranking_individual, 
+                        x='medal', y='name', 
+                        orientation='h',
+                        title=f'Top 10 Medallistas en {deporte_top} ({genero_top})',
+                        labels={'medal': 'Total de Medallas', 'name': 'Atleta'},
+                        color='medal', 
+                        color_continuous_scale='Oryel' if genero_top == 'F' else 'Ice')
+
+    fig_top_10.update_yaxes(autorange="reversed")
     
-    # Creamos el scatter plot
-    fig_scatter = px.scatter(df_biometry.head(10000), # Usamos 10k registros para que no pese tanto
-                            x="weight", y="height", 
-                            color="sport", 
-                            hover_name="name",
-                            title='Peso vs Altura de Atletas (Top 10,000)',
-                            labels={'weight': 'Peso (kg)', 'height': 'Altura (cm)', 'sport': 'Deporte'})
-    
-    st.plotly_chart(fig_scatter, use_container_width=True)
+    st.plotly_chart(fig_top_10, use_container_width=True)
+else:
+    st.warning(f"No se encontraron medallistas para {deporte_top} con este filtro.")
+
+st.header('4. Dominancia: Verano vs Invierno')
+pais_comp = st.selectbox('Selecciona un país para comparar temporadas:', sorted(df['noc'].unique()), index=53) # 53 suele ser NOR (Noruega)
+
+df_season = df[(df['noc'] == pais_comp) & (df['medal'] != 'No Medal')]
+resumen_season = df_season.groupby('season')['medal'].count().reset_index()
+
+fig_season = px.pie(resumen_season, values='medal', names='season', 
+                   title=f'Distribución de Medallas Verano vs Invierno: {pais_comp}',
+                   color_discrete_map={'Summer': 'orange', 'Winter': 'blue'})
+st.plotly_chart(fig_season, use_container_width=True)
 
 st.divider()
-st.caption('Proyecto desarrollado para el curso de Ingeniería de Datos. Dataset: TidyTuesday Olympics.')
+st.caption('Herramientas de desarrollo de software - Martin: Designer & Data Scientist.')
