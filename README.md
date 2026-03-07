@@ -5,8 +5,7 @@
 Este proyecto es un dashboard interactivo que analiza el histórico de medallas de los Juegos Olímpicos. Fue desarrollado como parte de mi transición hacia la **ciencia de datos**, combinando diseño estratégico y análisis visual.
 
 ### App en Vivo
-Puedes ver el dashboard funcionando aquí: 
-[Link a tu App en Render](https://olympics-dashboard-martin.onrender.com/) 
+Puedes ver el dashboard funcionando aquí: https://olympics-dashboard-martin.onrender.com/
 
 ### Tecnologías utilizadas
 * **Python**: Lenguaje principal.
